@@ -8,7 +8,7 @@
   @focus="$emit('focus', $event)"
   @click="$emit('click', $event)"
   @blur="$emit('blur', $event)"
-  @change="$emit('change', $event.target.value, $event)"
+  @change="change($event.target.value, $event)"
   @input="handleInput"
   @keyup="$emit('keyup', $event)"
   @keydown="$emit('keydown', $event)"
@@ -35,6 +35,7 @@
 <script>
 import { input } from '../mixins'
 import { omit, includes, extend } from 'lodash'
+import { parseUnit } from '../utils/helper'
 
 const TYPE_LIST = ['text', 'password', 'hidden', 'textarea']
 
@@ -50,6 +51,8 @@ export default {
         return includes(TYPE_LIST, val)
       }
     },
+    units: Array,
+    isNumber: Boolean,
     autocomplete: String,
     placeholder: String,
     value: {
@@ -64,7 +67,7 @@ export default {
   },
   data () {
     return {
-      localValue: this.value
+      ...this._getLocalValue()
     }
   },
   computed: {
@@ -72,6 +75,7 @@ export default {
       let attrs = omit(this.$props,
         'selectOnFocus', 'fitContent',
         'composition', 'resizable',
+        'units', 'isNumber',
         ...(this.type === 'textarea' ? ['type'] : [])
       )
       extend(attrs, {
@@ -103,6 +107,37 @@ export default {
     },
     activate () {
       this.$refs.input.focus()
+    },
+    change (newVal, event) {
+      let { value, unit, isNumber } = parseUnit(newVal)
+
+      if (this.units && this.units.length && isNumber) {
+        unit = includes(this.units, unit) ? unit : this.defaultUnit
+      } else if (this.isNumber && !isNumber) {
+        unit = this.defaultUnit
+        value = this.defaultValue
+      } else {
+        unit = ''
+        value = newVal
+      }
+
+      this.localValue = unit ? value + ' ' + unit : value
+      this.$emit('change', this.localValue, event)
+    },
+    _getLocalValue () {
+      let { value, unit, isNumber } = parseUnit(this.value)
+
+      if (this.units && this.units.length && isNumber) {
+        unit = includes(this.units, unit) ? unit : this.units[0]
+      } else {
+        unit = ''
+      }
+
+      return {
+        localValue: unit ? value + ' ' + unit : this.value,
+        defaultValue: value,
+        defaultUnit: unit
+      }
     }
   },
   mounted () {

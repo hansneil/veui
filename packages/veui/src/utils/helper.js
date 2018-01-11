@@ -1,4 +1,4 @@
-import { includes, camelCase, get, isString, isArray, isObject, assign, keys } from 'lodash'
+import { includes, camelCase, get, isString, isArray, isObject, assign, keys, isNaN } from 'lodash'
 
 export function getTypedAncestorTracker (type, name = type) {
   return {
@@ -147,4 +147,22 @@ export function keepOwn (obj) {
     }, {})
   }
   return obj
+}
+
+export function parseUnit (val) {
+  const value = parseFloat(val)
+
+  if (isNaN(value)) {
+    return {
+      value: val,
+      unit: '',
+      isNumber: false
+    }
+  }
+
+  return {
+    value,
+    unit: val.toString().replace(value, '').trim(),
+    isNumber: true
+  }
 }

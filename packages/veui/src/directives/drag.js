@@ -2,6 +2,7 @@ import { noop, isObject, isFunction, find, get, keys, isString } from 'lodash'
 import { getNodes } from '../utils/context'
 import BaseHandler from './drag/BaseHandler'
 import TranslateHandler from './drag/TranslateHandler'
+import RangeHandler from './drag/RangeHandler'
 import config from '../managers/config'
 
 config.defaults({
@@ -18,6 +19,7 @@ export function registerHandler (name, Handler) {
 }
 
 registerHandler('translate', TranslateHandler)
+registerHandler('range', RangeHandler)
 
 function clear (el) {
   let dragData = el.dragData
@@ -189,94 +191,99 @@ function parseParams (el, { arg, value, modifiers }, vnode) {
  *
  * **注：** 自定义 Handler 必须继承自 `BaseHandler` 。
  */
-export default {
-  componentUpdated (el, { modifiers, value, oldValue, arg }, vnode) {
-    const params = parseParams(el, { arg, value, modifiers }, vnode)
+function drag (el, { modifiers, value, oldValue, arg }, vnode) {
+  const params = parseParams(el, { arg, value, modifiers }, vnode)
 
-    if (el.dragData) {
-      el.dragData.handler.setOptions(params)
+  if (el.dragData) {
+    el.dragData.draggable = params.draggable
+    el.dragData.handler.setOptions(params)
+  } else {
+    let contextComponent = vnode.context
+    let handler = null
+    if (HANDLERS[params.type]) {
+      let Handler = HANDLERS[params.type]
+      handler = new Handler(params, contextComponent)
     } else {
-      let contextComponent = vnode.context
-      let handler = null
-      if (HANDLERS[params.type]) {
-        let Handler = HANDLERS[params.type]
-        handler = new Handler(params, contextComponent)
-      } else {
-        handler = new BaseHandler(params, contextComponent)
-      }
+      handler = new BaseHandler(params, contextComponent)
+    }
 
-      params.ready({ reset: () => handler.reset() })
+    params.ready({ reset: () => handler.reset() })
 
-      let dragData = {
-        dragging: false,
-        initX: 0,
-        initY: 0,
-        handler,
+    let dragData = {
+      dragging: false,
+      draggable: params.draggable,
+      initX: 0,
+      initY: 0,
+      handler,
 
-        mousedownHandler (event) {
-          if (!params.draggable || dragData.dragging) {
+      mousedownHandler (event) {
+        if (!dragData.draggable || dragData.dragging) {
+          return
+        }
+
+        let { clientX, clientY } = event
+        dragData.dragging = true
+        dragData.initX = clientX
+        dragData.initY = clientY
+        contextComponent.$emit('dragstart', { event })
+        handler.start({ event })
+        params.dragstart({ event })
+
+        function selectStartHandler (e) {
+          e.preventDefault()
+        }
+
+        function mouseMoveHandler (event) {
+          let { clientX, clientY } = event
+          if (!dragData.dragging) {
             return
           }
 
-          let { clientX, clientY } = event
-          dragData.dragging = true
-          dragData.initX = clientX
-          dragData.initY = clientY
-          contextComponent.$emit('dragstart', { event })
-          handler.start({ event })
-          params.dragstart({ event })
-
-          function selectStartHandler (e) {
-            e.preventDefault()
+          let dragParams = {
+            distanceX: clientX - dragData.initX,
+            distanceY: clientY - dragData.initY,
+            event
           }
-
-          function mouseMoveHandler (event) {
-            let { clientX, clientY } = event
-            if (!dragData.dragging) {
-              return
-            }
-
-            let dragParams = {
-              distanceX: clientX - dragData.initX,
-              distanceY: clientY - dragData.initY,
-              event
-            }
-            contextComponent.$emit('drag', dragParams)
-            handler.drag(dragParams)
-            params.drag(dragParams)
-          }
-
-          function mouseupHandler (event) {
-            dragData.dragging = false
-
-            let { clientX, clientY } = event
-
-            let dragParams = {
-              distanceX: clientX - dragData.initX,
-              distanceY: clientY - dragData.initY,
-              event
-            }
-            contextComponent.$emit('dragend', dragParams)
-            handler.end(dragParams)
-            params.dragend(dragParams)
-
-            window.removeEventListener('mousemove', mouseMoveHandler)
-            window.removeEventListener('mouseup', mouseupHandler)
-            window.removeEventListener('selectstart', selectStartHandler)
-          }
-
-          // TODO: 非IE下面不用移除选区
-          document.getSelection().removeAllRanges()
-          window.addEventListener('selectstart', selectStartHandler)
-
-          window.addEventListener('mousemove', mouseMoveHandler)
-          window.addEventListener('mouseup', mouseupHandler)
+          contextComponent.$emit('drag', dragParams)
+          handler.drag(dragParams)
+          params.drag(dragParams)
         }
-      }
 
-      el.addEventListener('mousedown', dragData.mousedownHandler)
-      el.dragData = dragData
+        function mouseupHandler (event) {
+          dragData.dragging = false
+
+          let { clientX, clientY } = event
+
+          let dragParams = {
+            distanceX: clientX - dragData.initX,
+            distanceY: clientY - dragData.initY,
+            event
+          }
+          contextComponent.$emit('dragend', dragParams)
+          handler.end(dragParams)
+          params.dragend(dragParams)
+
+          window.removeEventListener('mousemove', mouseMoveHandler)
+          window.removeEventListener('mouseup', mouseupHandler)
+          window.removeEventListener('selectstart', selectStartHandler)
+        }
+
+        // TODO: 非IE下面不用移除选区
+        document.getSelection().removeAllRanges()
+        window.addEventListener('selectstart', selectStartHandler)
+
+        window.addEventListener('mousemove', mouseMoveHandler)
+        window.addEventListener('mouseup', mouseupHandler)
+      }
     }
-  },
+
+    el.addEventListener('mousedown', dragData.mousedownHandler)
+    el.dragData = dragData
+  }
+}
+
+export default {
+  inserted: drag,
+  componentUpdated: drag,
   unbind: clear
 }

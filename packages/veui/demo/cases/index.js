@@ -30,6 +30,7 @@ import Progress from './Progress'
 import Carousel from './Carousel'
 import Transfer from './Transfer'
 import Schedule from './Schedule'
+import InputContainer from './InputContainer'
 
 export default [
   {
@@ -101,6 +102,11 @@ export default [
     path: '/input',
     name: 'Input',
     component: Input
+  },
+  {
+    path: '/input-container',
+    name: 'InputContainer',
+    component: InputContainer
   },
   {
     path: '/overlay',
